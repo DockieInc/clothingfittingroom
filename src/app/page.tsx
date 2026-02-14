@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import {
 	Upload,
 	ImageIcon,
@@ -12,12 +13,37 @@ import {
 	Download,
 	Zap,
 	Bot,
+	ChevronLeft,
+	ChevronRight,
+	Check,
+	ShoppingBag,
 } from "lucide-react";
 
 type UploadMode = "file" | "url";
 type AIProvider = "chatgpt" | "nanobanana";
 
 export default function Home() {
+	return (
+		<Suspense fallback={<HomeLoading />}>
+			<HomeContent />
+		</Suspense>
+	);
+}
+
+function HomeLoading() {
+	return (
+		<div className="max-w-3xl mx-auto px-6 sm:px-10 py-14 md:py-20 flex items-center justify-center min-h-[400px]">
+			<div className="flex flex-col items-center gap-3">
+				<span className="w-8 h-8 border-2 border-[var(--color-primary)]/30 border-t-[var(--color-primary)] rounded-full animate-spin" />
+				<p className="text-sm text-[var(--color-muted)]">Carregando...</p>
+			</div>
+		</div>
+	);
+}
+
+function HomeContent() {
+	const searchParams = useSearchParams();
+
 	const [productImage, setProductImage] = useState<string | null>(null);
 	const [userPhoto, setUserPhoto] = useState<string | null>(null);
 	const [resultImage, setResultImage] = useState<string | null>(null);
@@ -29,6 +55,47 @@ export default function Home() {
 		useState<UploadMode>("file");
 	const [userUploadMode, setUserUploadMode] = useState<UploadMode>("file");
 	const [aiProvider, setAiProvider] = useState<AIProvider>("chatgpt");
+
+	// Imagens vindas do site externo via query params
+	const [externalImages, setExternalImages] = useState<string[]>([]);
+	const [productHandle, setProductHandle] = useState<string | null>(null);
+	const [selectedExternalIndex, setSelectedExternalIndex] = useState<number>(0);
+
+	// Lê os query params na montagem
+	useEffect(() => {
+		const handle = searchParams.get("handle");
+		const imagesParam = searchParams.get("images");
+
+		if (handle) {
+			setProductHandle(handle);
+		}
+
+		if (imagesParam) {
+			try {
+				const parsed = JSON.parse(imagesParam);
+				if (Array.isArray(parsed) && parsed.length > 0) {
+					setExternalImages(parsed);
+					// Auto-seleciona a primeira imagem como produto
+					setProductImage(parsed[0]);
+					setSelectedExternalIndex(0);
+				}
+			} catch {
+				// JSON inválido — ignora
+				console.warn("Parâmetro 'images' inválido na URL.");
+			}
+		}
+	}, [searchParams]);
+
+	const handleSelectExternalImage = useCallback(
+		(url: string, index: number) => {
+			setProductImage(url);
+			setSelectedExternalIndex(index);
+			setResultImage(null);
+		},
+		[],
+	);
+
+	const hasExternalImages = externalImages.length > 0;
 
 	const productInputRef = useRef<HTMLInputElement>(null);
 	const userInputRef = useRef<HTMLInputElement>(null);
@@ -147,9 +214,17 @@ export default function Home() {
 				))}
 			</div>
 
-			{/* Cards Grid */}
-			<div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 w-full ">
-				{/* Step 1 — Imagem do Produto */}
+		{/* Cards Grid */}
+		<div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 w-full ">
+			{/* Step 1 — Imagem do Produto */}
+			{hasExternalImages ? (
+				<ProductImageSelector
+					images={externalImages}
+					selectedIndex={selectedExternalIndex}
+					productHandle={productHandle}
+					onSelect={handleSelectExternalImage}
+				/>
+			) : (
 				<ImageUploadCard
 					title="1. Imagem do Produto"
 					subtitle="Adicione a peça de roupa"
@@ -166,25 +241,26 @@ export default function Home() {
 					onUrlChange={setProductUrlInput}
 					onUrlSubmit={() => handleUrlSubmit(productUrlInput, setProductImage)}
 				/>
+			)}
 
-				{/* Step 2 — Sua Foto */}
-				<ImageUploadCard
-					title="2. Sua Foto"
-					subtitle="Adicione uma foto sua"
-					image={userPhoto}
-					onClear={() => {
-						setUserPhoto(null);
-						setResultImage(null);
-					}}
-					uploadMode={userUploadMode}
-					onToggleMode={(mode) => setUserUploadMode(mode)}
-					inputRef={userInputRef}
-					onFileChange={handleFileUpload(setUserPhoto)}
-					urlValue={userUrlInput}
-					onUrlChange={setUserUrlInput}
-					onUrlSubmit={() => handleUrlSubmit(userUrlInput, setUserPhoto)}
-				/>
-			</div>
+			{/* Step 2 — Sua Foto */}
+			<ImageUploadCard
+				title="2. Sua Foto"
+				subtitle="Adicione uma foto sua"
+				image={userPhoto}
+				onClear={() => {
+					setUserPhoto(null);
+					setResultImage(null);
+				}}
+				uploadMode={userUploadMode}
+				onToggleMode={(mode) => setUserUploadMode(mode)}
+				inputRef={userInputRef}
+				onFileChange={handleFileUpload(setUserPhoto)}
+				urlValue={userUrlInput}
+				onUrlChange={setUserUrlInput}
+				onUrlSubmit={() => handleUrlSubmit(userUrlInput, setUserPhoto)}
+			/>
+		</div>
 
 			{/* AI Provider Selector */}
 			{productImage && userPhoto && !resultImage && (
@@ -296,6 +372,125 @@ export default function Home() {
 							className="max-w-full max-h-[500px] object-contain"
 						/>
 					</div>
+				</div>
+			)}
+		</div>
+	);
+}
+
+/* ── Seletor de Imagens do Produto (vindas do site externo) ── */
+
+function ProductImageSelector({
+	images,
+	selectedIndex,
+	productHandle,
+	onSelect,
+}: Readonly<{
+	images: string[];
+	selectedIndex: number;
+	productHandle: string | null;
+	onSelect: (url: string, index: number) => void;
+}>) {
+	const scrollRef = useRef<HTMLDivElement>(null);
+
+	const scroll = (direction: "left" | "right") => {
+		if (!scrollRef.current) return;
+		const amount = 200;
+		scrollRef.current.scrollBy({
+			left: direction === "left" ? -amount : amount,
+			behavior: "smooth",
+		});
+	};
+
+	return (
+		<div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-card)] p-4">
+			{/* Header */}
+			<div className="flex items-center gap-2 mb-1">
+				<ShoppingBag className="w-4 h-4 text-[var(--color-primary)]" />
+				<h3 className="font-semibold text-sm">1. Imagem do Produto</h3>
+			</div>
+			{productHandle && (
+				<p className="text-xs text-[var(--color-muted)] mb-3 ml-6 truncate">
+					{productHandle.replaceAll("-", " ")}
+				</p>
+			)}
+			{!productHandle && (
+				<p className="text-xs text-[var(--color-muted)] mb-3 ml-6">
+					Escolha a foto do produto para experimentar
+				</p>
+			)}
+
+			{/* Imagem principal selecionada */}
+			<div className="rounded-xl overflow-hidden bg-[var(--color-background)] flex items-center justify-center min-h-[200px] mb-3">
+				<img
+					src={images[selectedIndex]}
+					alt={`Produto ${productHandle || ""} - imagem ${selectedIndex + 1}`}
+					className="max-w-full max-h-[240px] object-contain"
+				/>
+			</div>
+
+			{/* Thumbnails com scroll horizontal */}
+			{images.length > 1 && (
+				<div className="relative">
+					{/* Botões de navegação */}
+					{images.length > 3 && (
+						<>
+							<button
+								type="button"
+								onClick={() => scroll("left")}
+								className="absolute left-0 top-1/2 -translate-y-1/2 z-10 p-1 rounded-full bg-[var(--color-card)] border border-[var(--color-border)] shadow-sm hover:bg-[var(--color-background)] transition-colors"
+								aria-label="Anterior"
+							>
+								<ChevronLeft className="w-3.5 h-3.5" />
+							</button>
+							<button
+								type="button"
+								onClick={() => scroll("right")}
+								className="absolute right-0 top-1/2 -translate-y-1/2 z-10 p-1 rounded-full bg-[var(--color-card)] border border-[var(--color-border)] shadow-sm hover:bg-[var(--color-background)] transition-colors"
+								aria-label="Próxima"
+							>
+								<ChevronRight className="w-3.5 h-3.5" />
+							</button>
+						</>
+					)}
+
+					<div
+						ref={scrollRef}
+						className="flex gap-2 overflow-x-auto scrollbar-hide px-1 py-1"
+						style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+					>
+						{images.map((img, i) => (
+							<button
+								key={`product-thumb-${img}`}
+								type="button"
+								onClick={() => onSelect(img, i)}
+								className={`relative shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition-all ${
+									selectedIndex === i
+										? "border-[var(--color-primary)] ring-2 ring-[var(--color-primary)]/20"
+										: "border-[var(--color-border)] hover:border-[var(--color-primary)]/50"
+								}`}
+							>
+								<img
+									src={img}
+									alt={`Variação ${i + 1}`}
+									className="w-full h-full object-cover"
+								/>
+								{selectedIndex === i && (
+									<div className="absolute inset-0 bg-[var(--color-primary)]/10 flex items-center justify-center">
+										<div className="w-5 h-5 rounded-full bg-[var(--color-primary)] flex items-center justify-center">
+											<Check className="w-3 h-3 text-white" />
+										</div>
+									</div>
+								)}
+							</button>
+						))}
+					</div>
+
+					{/* Indicador de qual imagem está selecionada */}
+					<p className="text-xs text-center text-[var(--color-muted)] mt-2">
+						Imagem {selectedIndex + 1} de {images.length} — clique para
+						trocar
+					</p>
 				</div>
 			)}
 		</div>
