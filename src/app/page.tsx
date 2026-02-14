@@ -10,9 +10,12 @@ import {
 	ArrowRight,
 	AlertCircle,
 	Download,
+	Zap,
+	Bot,
 } from "lucide-react";
 
 type UploadMode = "file" | "url";
+type AIProvider = "chatgpt" | "nanobanana";
 
 export default function Home() {
 	const [productImage, setProductImage] = useState<string | null>(null);
@@ -25,6 +28,7 @@ export default function Home() {
 	const [productUploadMode, setProductUploadMode] =
 		useState<UploadMode>("file");
 	const [userUploadMode, setUserUploadMode] = useState<UploadMode>("file");
+	const [aiProvider, setAiProvider] = useState<AIProvider>("chatgpt");
 
 	const productInputRef = useRef<HTMLInputElement>(null);
 	const userInputRef = useRef<HTMLInputElement>(null);
@@ -60,7 +64,7 @@ export default function Home() {
 			const res = await fetch("/api/generate", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ productImage, userPhoto }),
+				body: JSON.stringify({ productImage, userPhoto, provider: aiProvider }),
 			});
 
 			const data = await res.json();
@@ -79,7 +83,7 @@ export default function Home() {
 		} finally {
 			setIsGenerating(false);
 		}
-	}, [productImage, userPhoto]);
+	}, [productImage, userPhoto, aiProvider]);
 
 	const handleReset = useCallback(() => {
 		setProductImage(null);
@@ -181,6 +185,46 @@ export default function Home() {
 					onUrlSubmit={() => handleUrlSubmit(userUrlInput, setUserPhoto)}
 				/>
 			</div>
+
+			{/* AI Provider Selector */}
+			{productImage && userPhoto && !resultImage && (
+				<div className="w-full mb-6">
+					<p className="block text-sm font-medium mb-3 text-center">
+						Modelo de IA
+					</p>
+					<div className="flex gap-3 max-w-md mx-auto">
+						<button
+							type="button"
+							onClick={() => setAiProvider("chatgpt")}
+							className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl border-2 font-medium text-sm transition-all ${
+								aiProvider === "chatgpt"
+									? "border-[var(--color-primary)] bg-[var(--color-primary)]/10 text-[var(--color-primary)] shadow-sm"
+									: "border-[var(--color-border)] bg-[var(--color-card)] text-[var(--color-muted)] hover:border-[var(--color-primary)]/40 hover:text-[var(--color-foreground)]"
+							}`}
+						>
+							<Bot className="w-4 h-4" />
+							ChatGPT
+						</button>
+						<button
+							type="button"
+							onClick={() => setAiProvider("nanobanana")}
+							className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl border-2 font-medium text-sm transition-all ${
+								aiProvider === "nanobanana"
+									? "border-amber-500 bg-amber-500/10 text-amber-600 dark:text-amber-400 shadow-sm"
+									: "border-[var(--color-border)] bg-[var(--color-card)] text-[var(--color-muted)] hover:border-amber-500/40 hover:text-[var(--color-foreground)]"
+							}`}
+						>
+							<Zap className="w-4 h-4" />
+							Nano Banana
+						</button>
+					</div>
+					<p className="text-xs text-[var(--color-muted)] text-center mt-2">
+						{aiProvider === "chatgpt"
+							? "GPT-4o com geração de imagem — alta fidelidade"
+							: "Nano Banana Pro — processamento rápido com IA"}
+					</p>
+				</div>
+			)}
 
 			{/* Error Message */}
 			{error && (
