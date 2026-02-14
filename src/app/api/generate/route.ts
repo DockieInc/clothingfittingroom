@@ -2,9 +2,11 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
 
-const openai = new OpenAI({
-	apiKey: process.env.OPENAI_API_KEY,
-});
+function getOpenAIClient() {
+	return new OpenAI({
+		apiKey: process.env.OPENAI_API_KEY,
+	});
+}
 
 /**
  * Prompt escondido do usuário.
@@ -469,6 +471,7 @@ async function generateWithChatGPT(productImage: string, userPhoto: string) {
 		);
 	}
 
+	const openai = getOpenAIClient();
 	const response = await openai.responses.create({
 		model: "gpt-4o",
 		input: [
