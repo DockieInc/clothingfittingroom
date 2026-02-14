@@ -482,10 +482,12 @@ async function generateWithChatGPT(productImage: string, userPhoto: string) {
 					{
 						type: "input_image",
 						image_url: userPhoto,
+						detail: "high",
 					},
 					{
 						type: "input_image",
 						image_url: productImage,
+						detail: "high",
 					},
 					{
 						type: "input_text",
