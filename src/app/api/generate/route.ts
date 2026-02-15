@@ -384,6 +384,23 @@ K) FINAL COMMAND
 /* ── Helpers ── */
 
 /**
+ * Normaliza URLs protocol-relative (//domain/path) para https://domain/path.
+ */
+function ensureFullUrl(url: string): string {
+	if (url.startsWith("//")) {
+		return `https:${url}`;
+	}
+	return url;
+}
+
+/**
+ * Verifica se o valor é uma URL remota (http:// ou https://).
+ */
+function isRemoteUrl(value: string): boolean {
+	return value.startsWith("http://") || value.startsWith("https://");
+}
+
+/**
  * Extrai o base64 puro de uma data-URL.
  * Se já for base64 puro, devolve como está.
  */
@@ -392,6 +409,32 @@ function stripDataUrl(dataUrl: string): string {
 		return dataUrl.split(",")[1] ?? dataUrl;
 	}
 	return dataUrl;
+}
+
+/**
+ * Resolve uma imagem para base64 puro.
+ * - Se for uma data-URL ou base64, extrai o base64.
+ * - Se for uma URL remota (http/https), faz fetch e converte para base64.
+ * - Se for protocol-relative (//...), adiciona https: primeiro.
+ */
+async function resolveToBase64(imageInput: string): Promise<string> {
+	// Normaliza protocol-relative URLs
+	const normalized = ensureFullUrl(imageInput);
+
+	// Se é uma URL remota, faz fetch e converte para base64
+	if (isRemoteUrl(normalized)) {
+		const response = await fetch(normalized);
+		if (!response.ok) {
+			throw new Error(
+				`Falha ao baixar imagem de ${normalized} (HTTP ${response.status})`,
+			);
+		}
+		const buffer = await response.arrayBuffer();
+		return Buffer.from(buffer).toString("base64");
+	}
+
+	// Caso contrário, é data-URL ou base64 puro
+	return stripDataUrl(normalized);
 }
 
 /**
@@ -472,6 +515,11 @@ async function generateWithChatGPT(productImage: string, userPhoto: string) {
 	}
 
 	const openai = getOpenAIClient();
+
+	// Normaliza URLs protocol-relative para https:// (OpenAI não aceita //domain/...)
+	const normalizedUserPhoto = ensureFullUrl(userPhoto);
+	const normalizedProductImage = ensureFullUrl(productImage);
+
 	const response = await openai.responses.create({
 		model: "gpt-4o",
 		input: [
@@ -484,12 +532,12 @@ async function generateWithChatGPT(productImage: string, userPhoto: string) {
 				content: [
 					{
 						type: "input_image",
-						image_url: userPhoto,
+						image_url: normalizedUserPhoto,
 						detail: "high",
 					},
 					{
 						type: "input_image",
-						image_url: productImage,
+						image_url: normalizedProductImage,
 						detail: "high",
 					},
 					{
@@ -544,10 +592,9 @@ async function generateWithNanoBanana(productImage: string, userPhoto: string) {
 		);
 	}
 
-	// Envia as duas imagens via base64 (imageData) usando JSON
-	// Nano Banana aceita imageUrl como array de URLs ou imageData como base64
-	const productBase64 = stripDataUrl(productImage);
-	const userBase64 = stripDataUrl(userPhoto);
+	// Resolve as imagens para base64 (pode ser data-URL, base64 puro, ou URL remota)
+	const productBase64 = await resolveToBase64(productImage);
+	const userBase64 = await resolveToBase64(userPhoto);
 
 	// Usar FormData com multipart para enviar as imagens como blobs
 	const formData = new FormData();

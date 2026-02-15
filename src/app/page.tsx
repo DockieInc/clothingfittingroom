@@ -74,9 +74,15 @@ function HomeContent() {
 			try {
 				const parsed = JSON.parse(imagesParam);
 				if (Array.isArray(parsed) && parsed.length > 0) {
-					setExternalImages(parsed);
+					// Normaliza URLs protocol-relative (//domain/path → https://domain/path)
+					const normalized = parsed.map((url: string) =>
+						typeof url === "string" && url.startsWith("//")
+							? `https:${url}`
+							: url,
+					);
+					setExternalImages(normalized);
 					// Auto-seleciona a primeira imagem como produto
-					setProductImage(parsed[0]);
+					setProductImage(normalized[0]);
 					setSelectedExternalIndex(0);
 				}
 			} catch {
